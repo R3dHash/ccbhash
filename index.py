@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request
 import ccbhash
-
+import os
+BASE_SAMPLE_DIR = "/data/samples/downloader_DLLs"
 app = Flask(__name__)
 
-bbdd = ccbhash.get_db('bbdd.json')
+bbdd = ccbhash.get_db("bbdd.json")
 ccbhashes: dict[str, dict[str, ]] = {}
 graphs: dict[str, str] = {}
 callgraphs: dict[str, str] = {}
@@ -75,7 +76,9 @@ def comparison():
         func2 = y[2]
         graph1 = graphs[func]
         fgraph1 = graph1.replace('\n', '<br>').replace('\\', '\\\\')
-        last_cfg, last_callgraph = ccbhash.get_graph(func2, f'/Users/pabloperezjimenez/Desktop/DescargasVT/{family}/{file}')
+        file_path = os.path.join(BASE_SAMPLE_DIR, family, file)
+
+        last_cfg, last_callgraph = ccbhash.get_graph(func2, file_path)
         fgraph2 = last_cfg.replace('\n', '<br>').replace('\\', '\\\\')
 
         return render_template('similarity.html', fgraph=fgraph1, fgraph2=fgraph2, functions={'functions': list(graphs.keys())}, function=func, function2=family_file_func_score, scores={'scores': scores[:100]}, graph_type='cfg')
@@ -122,4 +125,4 @@ def change_graph():
         return render_template('similarity.html', fgraph=fgraph1, fgraph2=fgraph2, functions={'functions': list(graphs.keys())}, function=func, function2=family_file_func_score, scores={'scores': scores[:100]}, graph_type=graph_type)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='localhost', port=8000)
+    app.run(debug=True, host='0.0.0.0', port=8100)
