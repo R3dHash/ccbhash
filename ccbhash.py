@@ -43,7 +43,7 @@ def _get_variables(finf):
                     else: vars[var['type']] += 1 
     except:
         # It should never pass this way.
-        raise Exception(f'Error to get variables')
+        return {'args': '', 'vars': ''}
     
     args = dict(sorted(args.items()))
     vars = dict(sorted(vars.items()))
@@ -58,118 +58,104 @@ def _get_variables(finf):
     return {'args': args_line, 'vars': vars_line}
 
 def _get_callgraph(function_name, global_callgraph):
-    '''
-    Get CallGraph from Radare assembly function.
+    if not global_callgraph:
+        return ""
 
-    Args:
-    - function_name (str): function name
-    - global_callgraph = r2.cmdj("agCj")
-
-    Returns:
-    - callgraph (str): Callgraph using str format (similar to Machoke)
-    '''
-
-    callgraph: dict[str, list[str]] = {}
-    functions_id: dict[str, str] = {}
-    functions_left: list[str] = []
+    callgraph = {}
+    functions_id = {}
+    functions_left = [function_name]
     id_function = 0
-    
-    functions_left.append(function_name)
-    while len(functions_left) > 0:
+
+    while functions_left:
         current_function = functions_left.pop(0)
+        if current_function in functions_id:
+            continue
+
         functions_id[current_function] = str(id_function)
         id_function += 1
+
         for function in global_callgraph:
-            if function['name'] == current_function:
-                if current_function not in callgraph: callgraph[current_function] = []
-                for f in function['imports']:
-                    if f not in callgraph[current_function]: 
-                        callgraph[current_function].append(f)
-                        if f not in functions_left: functions_left.append(f)
+            if function.get("name") == current_function:
+                callgraph.setdefault(current_function, [])
+                for f in function.get("imports", []):
+                    callgraph[current_function].append(f)
+                    if f not in functions_left:
+                        functions_left.append(f)
                 break
 
-    line = ''
+    line = ""
     for name, outputs in callgraph.items():
-        line += functions_id[name] + ':'
+        line += functions_id[name] + ":"
         for output in outputs:
-            try:
-                line += functions_id[output] + ','
-            except:
-                # It fails because output is not in the function. It happens because of Radare.
-                # It can be ignored although it should be improved.
-                print(f'[!!] Failed to get callgraph. From node {name} to node {output}')
-        line = (line[:-1] if len(outputs) > 0 else line) + ";"
+            if output in functions_id:
+                line += functions_id[output] + ","
+        line = (line[:-1] if outputs else line) + ";"
 
     return line
 
 def _get_cfg(fcode):
-    '''
-    Get Control Flow Graph from Radare assembly function.
-
-    Args:
-    - fcode = r2.cmdj("agj")
-
-    Returns:
-    - cfg (str): Control Flow Graph using str format (similar to Machoke)
-    '''
-
-    blocks_outputs: dict[str, list[str]] = {}
-    blocks_id: dict[str, str] = {}
+    blocks_outputs = {}
+    blocks_id = {}
     id_block = 0
 
-    for block in fcode[0]["blocks"]:
-        blocks_outputs[hex(block["offset"])] = []
-        blocks_id[hex(block["offset"])] = str(id_block)
+    if not fcode or not isinstance(fcode, list):
+        return ""
+
+    for block in fcode[0].get("blocks", []):
+        offset = block.get("offset")
+        if offset is None:
+            continue
+
+        off_hex = hex(offset)
+        blocks_outputs[off_hex] = []
+        blocks_id[off_hex] = str(id_block)
         id_block += 1
-        if "fail" in block: blocks_outputs[hex(block["offset"])].append(hex(block["fail"]))
-        if "jump" in block: blocks_outputs[hex(block["offset"])].append(hex(block["jump"]))
-        if len(blocks_outputs[hex(block["offset"])]) > 1: blocks_outputs[hex(block["offset"])].sort()
+
+        if "fail" in block:
+            blocks_outputs[off_hex].append(hex(block["fail"]))
+
+        if "jump" in block:
+            blocks_outputs[off_hex].append(hex(block["jump"]))
+
+        if len(blocks_outputs[off_hex]) > 1:
+            blocks_outputs[off_hex].sort()
 
     line = ""
     for offset, outputs in blocks_outputs.items():
         line += blocks_id[offset] + ":"
         for output in outputs:
-            try:
+            if output in blocks_id:
                 line += blocks_id[output] + ","
-            except:
-                # It fails because output is not in the function. It happens because of Radare.
-                # It can be ignored although it should be improved.
-                print(f'[!!] Failed to get callgraph. From node {offset} to node {output}')
-        line = (line[:-1] if len(outputs) > 0 else line) + ";"
+        line = (line[:-1] if outputs else line) + ";"
 
     return line
 
 def _get_opcodes(fcode):
-    '''
-    Get opcodes from Radare assembly function.
+    opcodes = {}
 
-    Args:
-    - fcode = r2.cmdj("agj")
+    if not fcode or not isinstance(fcode, list):
+        return ""
 
-    Returns:
-    - opcodes (str): Opcodes using str format
-    '''
+    for block in fcode[0].get("blocks", []):
+        for instruction in block.get("ops", []):
+            ins_type = str(instruction.get("type", ""))
+            if not ins_type or ins_type == "nop":
+                continue
 
-    opcodes: dict[str, int] = {}
+            if "cmp" in ins_type:
+                ins_type = "cmp"
+            elif "jmp" in ins_type:
+                ins_type = "jmp"
+            elif "call" in ins_type:
+                ins_type = "call"
+            elif "push" in ins_type:
+                ins_type = "push"
 
-    for block in fcode[0]["blocks"]:
-        for instruction in block["ops"]:
-            ins_type = str(instruction["type"])
-            if ins_type == 'nop': continue
-            ins_type = "cmp" if "cmp" in ins_type else ins_type
-            ins_type = "jmp" if "jmp" in ins_type else ins_type
-            ins_type = "call" if "call" in ins_type else ins_type
-            ins_type = "push" if "push" in ins_type else ins_type
-            if ins_type in opcodes:
-                opcodes[ins_type] += 1
-            else: 
-                opcodes[ins_type] = 1
-    
-    opcodes = dict(sorted(opcodes.items()))
+            opcodes[ins_type] = opcodes.get(ins_type, 0) + 1
 
-    line = ''
-    for f in opcodes.keys():
-        line += f + ';'
+    line = ""
+    for key in sorted(opcodes.keys()):
+        line += key + ";"
 
     return line
 
@@ -251,26 +237,45 @@ def calculate_ccbhash(file: str):
     Returns:
     - ccbhashes (dict[str, dict]): Functions CCBHashes
     '''
-
     f_hash: dict[str, dict] = {}
     jsn = []
     # If len(jsn) == 0 then Radare failed to open the file and we must repeat it
     # Radare usually fails to open files for no reason but trying again works
     while len(jsn) == 0:
-        r2 = r2pipe.open(file)
+        r2 = r2pipe.open(
+            file,
+            flags=[
+                "-e", "bin.relocs.apply=true",
+                "-e", "bin.cache=true"
+            ]
+        )
+
         r2.cmd("aaa")
-        jsn = r2.cmdj("aflj")
+        jsn = r2.cmdj("aflj") or []
     global_callgraph = r2.cmdj("agCj")
     for function in jsn:
         if function['ninstrs'] < 10 and function['nbbs'] < 2: continue
-        r2.cmd(f"s {function['offset']}")
+
+        offset = function.get("offset") or function.get("addr")
+        if offset is None:
+            print(f"[!!] Function {function.get('name')} missing offset/addr, skipping.")
+            continue
+        r2.cmd(f"s {offset}")
         fcode = r2.cmdj("agj")
         if len(fcode) == 0:
             # Error to get the code from current function
             # We must continue getting the code from the rest of the functions
             print(f'[!!] Failed to get code from {function["name"]}')
             continue
-        finf = r2.cmdj("afij")
+        finf = r2.cmdj("afij") or []
+        if not finf:
+            # fallback: use empty args/locals
+            variables = {'args': '', 'vars': ''}
+        else:
+            try:
+                variables = _get_variables(finf)
+            except Exception:
+                variables = {'args': '', 'vars': ''}
         nargs = 0 if "nargs" not in function else function["nargs"]
         nlocals = 0 if "nlocals" not in function else function["nlocals"]
         try:
@@ -322,7 +327,10 @@ def calculate_ccbhash_and_graphs(file: str):
     global_callgraph = r2.cmdj("agCj")
     for function in jsn:
         if function['ninstrs'] < 10 and function['nbbs'] < 2: continue
-        r2.cmd(f"s {function['offset']}")
+        offset = function.get("offset") or function.get("addr")
+        if offset is None:
+            continue
+        r2.cmd(f"s {offset}")
         fcode = r2.cmdj("agj")
         if len(fcode) == 0:
             print(f'[!!] Failed to get code from {function["name"]}')
@@ -500,7 +508,11 @@ def get_graph(func: str, dir: str) -> tuple[str, str]:
         jsn = r2.cmdj("aflj")
     for f in jsn:
         if f['name'] == func:
-            r2.cmd(f"s {f['offset']}")
+            offset = function.get("offset") or function.get("addr")
+            if offset is None:
+                print(f"[!!] Function {function.get('name')} missing offset/addr, skipping.")
+                continue
+            r2.cmd(f"s {offset}")
             return r2.cmd("agf"), r2.cmd("agc")
     # If the function does not exist, None is returned
     # An exception could be raised instead of returning None
