@@ -487,34 +487,38 @@ def update_db_from_samples(main_dir: str, output_file: str = 'bbdd.json'):
     with open(output_file, 'w') as outfile:
         json.dump(json_string, outfile)
 
-def get_graph(func: str, dir: str) -> tuple[str, str]:
-    '''
+def get_graph(func: str, file_path: str) -> tuple[str, str]:
+    """
     Get function CFG and callgraph using ASCII art.
 
     Args:
     - func (str): Function name
-    - dir (str): Directory with the sample
+    - file_path (str): Path to the sample file
 
     Returns:
-    - CFG, callgraph (tuple[str, str]): Function CFG using ASCII art. If function does not exist, None is returned
-    '''
+    - (cfg, callgraph) (tuple[str, str]): Function CFG and callgraph as ASCII art.
 
+    Raises:
+    - Exception if the function does not exist or offset cannot be determined.
+    """
     jsn = []
-    # If len(jsn) == 0 then Radare failed to open the file and we must repeat it
-    # Radare usually fails to open files for no reason but trying again works
+
+    # Retry if Radare fails to open the file initially
     while len(jsn) == 0:
-        r2 = r2pipe.open(dir)
+        r2 = r2pipe.open(file_path)
         r2.cmd("aaa")
-        jsn = r2.cmdj("aflj")
+        jsn = r2.cmdj("aflj") or []
+
     for f in jsn:
         if f['name'] == func:
-            offset = function.get("offset") or function.get("addr")
+            offset = f.get("offset") or f.get("addr")
             if offset is None:
-                print(f"[!!] Function {function.get('name')} missing offset/addr, skipping.")
-                continue
+                raise Exception(f"[!!] Function '{func}' missing offset/addr, cannot get graphs.")
             r2.cmd(f"s {offset}")
-            return r2.cmd("agf"), r2.cmd("agc")
-    # If the function does not exist, None is returned
-    # An exception could be raised instead of returning None
-    # return None
-    raise Exception(f'Error to get graphs from function {func}. The function may not exist')
+            cfg = r2.cmd("agf")
+            callgraph = r2.cmd("agc")
+            r2.quit()
+            return cfg, callgraph
+
+    r2.quit()
+    raise Exception(f"Function '{func}' not found in the binary. Cannot retrieve graphs.")
