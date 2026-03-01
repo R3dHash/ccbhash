@@ -7,13 +7,13 @@
     <div style="text-align: center; color: grey; font-family: courier; font-size: 80%">
 
         <form action="/file" method="post" enctype="multipart/form-data">
-            <label for="file">Seleccione el fichero:</label>
+            <label for="file">Select a file:</label>
             <input type="file" id="file" name="file">
             <input type="submit" value="Enviar">
         </form>
         
         <form action="/graph" method="post" enctype="multipart/form-data">
-            <label for="function">Seleccione la función:</label>
+            <label for="function">Select a function:</label>
             <select name="function" id="function"></select>
             <input type="submit" value="Mostrar">
         </form>
@@ -25,7 +25,7 @@
 
         <form action="/comparison" method="post" enctype="multipart/form-data">
             <input type="hidden" id="comparison_function" name="function">
-            <label for="function2">Seleccione la función:</label>
+            <label for="function2">Select a function:</label>
             <select name="function2" id="function2"></select>
             <input type="submit" value="Mostrar">
         </form>
@@ -33,13 +33,13 @@
         <form action="/change_graph" method="post" enctype="multipart/form-data">
             <input type="hidden" id="change_function1" name="function">
             <input type="hidden" id="change_function2" name="function2">
-            <label for="graph_type">Seleccione el tipo de grafo:</label>
-            <select name="graph_type" id="graph_type">
-                <option value="cfg">CFG con instrucciones</option>
-                <option value="little_cfg">CFG sin instrucciones</option>
-                <option value="callgraph">Callgraph</option>
-            </select>
-            <input type="submit" value="Cambiar">
+            <label for="graph_type">Select graph type:</label>
+                <select name="graph_type" id="graph_type">
+                    <option value="cfg">CFG with instructions</option>
+                    <option value="little_cfg">CFG without instructions</option>
+                    <option value="callgraph">Callgraph</option>
+                </select>
+            <input type="submit" value="Change">
         </form>
 
     </div>
